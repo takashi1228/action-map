@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Map, Users, MessageSquare, Send, Navigation, Activity, Cloud, List, Table2, 
   Check, Sparkles, Bot, Bell, Link2, Calendar, MapPin, Building, ChevronDown, 
   ChevronUp, Globe, Phone, Image as ImageIcon, MapIcon, ZoomIn, ZoomOut, Download, 
-  X, Maximize2, ArrowLeft, Heart, MessageCircle, Filter 
+  X, Maximize2, ArrowLeft, Heart, MessageCircle, Filter, Tag, Upload, LayoutGrid, LayoutList
 } from 'lucide-react';
 
 // --- Firebase Initialization ---
@@ -44,6 +44,57 @@ const prefectures = [
   { code: '47', name: '沖縄', region: 'kyushu' }
 ];
 
+// 日本地図のグリッド配置（カルトグラム風）
+const prefPositions = {
+  '01': { row: 1, col: 14, name: '北海道' },
+  '02': { row: 3, col: 14, name: '青森' },
+  '03': { row: 4, col: 14, name: '岩手' },
+  '04': { row: 5, col: 14, name: '宮城' },
+  '05': { row: 4, col: 13, name: '秋田' },
+  '06': { row: 5, col: 13, name: '山形' },
+  '07': { row: 6, col: 14, name: '福島' },
+  '08': { row: 7, col: 14, name: '茨城' },
+  '09': { row: 7, col: 13, name: '栃木' },
+  '10': { row: 7, col: 12, name: '群馬' },
+  '11': { row: 8, col: 13, name: '埼玉' },
+  '12': { row: 8, col: 14, name: '千葉' },
+  '13': { row: 9, col: 13, name: '東京' },
+  '14': { row: 9, col: 12, name: '神奈川' },
+  '15': { row: 6, col: 12, name: '新潟' },
+  '16': { row: 6, col: 11, name: '富山' },
+  '17': { row: 6, col: 10, name: '石川' },
+  '18': { row: 7, col: 10, name: '福井' },
+  '19': { row: 8, col: 12, name: '山梨' },
+  '20': { row: 7, col: 11, name: '長野' },
+  '21': { row: 8, col: 11, name: '岐阜' },
+  '22': { row: 9, col: 11, name: '静岡' },
+  '23': { row: 9, col: 10, name: '愛知' },
+  '24': { row: 9, col: 9, name: '三重' },
+  '25': { row: 8, col: 9, name: '滋賀' },
+  '26': { row: 8, col: 8, name: '京都' },
+  '27': { row: 9, col: 8, name: '大阪' },
+  '28': { row: 8, col: 7, name: '兵庫' },
+  '29': { row: 9, col: 7, name: '奈良' },
+  '30': { row: 10, col: 8, name: '和歌山' },
+  '31': { row: 8, col: 6, name: '鳥取' },
+  '32': { row: 8, col: 5, name: '島根' },
+  '33': { row: 9, col: 6, name: '岡山' },
+  '34': { row: 9, col: 5, name: '広島' },
+  '35': { row: 9, col: 4, name: '山口' },
+  '36': { row: 11, col: 7, name: '徳島' },
+  '37': { row: 10, col: 7, name: '香川' },
+  '38': { row: 10, col: 6, name: '愛媛' },
+  '39': { row: 11, col: 6, name: '高知' },
+  '40': { row: 10, col: 3, name: '福岡' },
+  '41': { row: 10, col: 2, name: '佐賀' },
+  '42': { row: 10, col: 1, name: '長崎' },
+  '43': { row: 11, col: 2, name: '熊本' },
+  '44': { row: 11, col: 3, name: '大分' },
+  '45': { row: 12, col: 3, name: '宮崎' },
+  '46': { row: 12, col: 2, name: '鹿児島' },
+  '47': { row: 14, col: 1, name: '沖縄' }
+};
+
 const actionCategories = [
   { id: '教員アクション', label: '教員アクション', color: 'bg-pink-100 text-pink-700 border-pink-200' },
   { id: '議会等請願', label: '議会等請願', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
@@ -52,6 +103,8 @@ const actionCategories = [
 ];
 
 export default function App() {
+  const fileInputRef = useRef(null);
+  
   const [data, setData] = useState([]);
   const [selectedPref, setSelectedPref] = useState(null);
   const [activeTab, setActiveTab] = useState('actions'); // 'actions', 'groups', 'tactics'
@@ -71,11 +124,13 @@ export default function App() {
   const [organizer, setOrganizer] = useState('');
   const [targetOrg, setTargetOrg] = useState('');
   const [link, setLink] = useState('');
+  const [tagsInput, setTagsInput] = useState('');
+  const [attachedImage, setAttachedImage] = useState(null); // Base64 image
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   // UI State
-  const [viewMode, setViewMode] = useState('list'); // 'list' or 'map'
+  const [viewFormat, setViewFormat] = useState('card'); // 'card' or 'table'
   const [selectedFilters, setSelectedFilters] = useState([]);
   const [selectedPost, setSelectedPost] = useState(null);
   const [commentText, setCommentText] = useState('');
@@ -141,7 +196,7 @@ export default function App() {
     if (isPreview) return;
     try {
       await signOut(auth);
-      setIsGroupMember(false); // ログアウト時にロック状態もリセット
+      setIsGroupMember(false); 
     } catch (error) {
       console.error("Logout failed", error);
     }
@@ -149,11 +204,53 @@ export default function App() {
 
   const handleUnlock = (e) => {
     e.preventDefault();
-    if (secretWord === 'breakthrough') { // 秘密の言葉
+    if (secretWord === 'minnnaegaode2026') { 
       setIsGroupMember(true);
       setSecretWord('');
     } else {
       alert('秘密の言葉が違います。');
+    }
+  };
+
+  // 画像のリサイズ処理（軽量化してFirestoreに保存するため）
+  const resizeImage = (file, maxWidth = 800) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.6)); // 画質を下げて容量削減
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('ファイルサイズが大きすぎます。5MB以下の画像を選択してください。');
+      return;
+    }
+    try {
+      const resizedBase64 = await resizeImage(file);
+      setAttachedImage(resizedBase64);
+    } catch (error) {
+      console.error("Image resize error:", error);
+      alert('画像の処理に失敗しました。');
     }
   };
 
@@ -170,6 +267,7 @@ export default function App() {
     setIsSubmitting(true);
     setErrorMsg('');
     try {
+      const tagsArray = tagsInput.split(',').map(t => t.trim()).filter(t => t);
       await addDoc(collection(db, COLLECTION_PATH), {
         prefectureCode: selectedPref.code,
         type: activeTab,
@@ -181,13 +279,16 @@ export default function App() {
         organizer,
         targetOrg,
         link,
+        tags: tagsArray,
+        image: attachedImage,
         createdAt: serverTimestamp(),
         userId: user.uid,
         likes: [],
         comments: []
       });
-      setContent(''); setDate(''); setLocation(''); setOrganizer(''); setTargetOrg(''); setLink('');
-      setIsFormOpen(false); // 投稿成功したらフォームを閉じる
+      setContent(''); setDate(''); setLocation(''); setOrganizer(''); setTargetOrg(''); 
+      setLink(''); setTagsInput(''); setAttachedImage(null);
+      setIsFormOpen(false); 
     } catch (error) {
       console.error("Error adding document: ", error);
       setErrorMsg('投稿に失敗しました。もう一度お試しください。');
@@ -231,7 +332,6 @@ export default function App() {
     try {
       await updateDoc(postRef, { comments: arrayUnion(newComment) });
       setCommentText('');
-      // Update local state for immediate UI reflection
       setSelectedPost(prev => ({...prev, comments: [...(prev.comments || []), newComment]}));
     } catch (error) {
       console.error("Error adding comment:", error);
@@ -267,7 +367,7 @@ export default function App() {
   };
 
   const handleDownloadCSV = () => {
-    const headers = ['都道府県', '種類', 'カテゴリ/団体名', '投稿者', '内容', '日時', '場所', 'リンク'];
+    const headers = ['都道府県', '種類', 'カテゴリ/団体名', '投稿者', '内容', 'タグ', '日時', '場所', 'リンク'];
     const csvContent = [
       headers.join(','),
       ...data.map(d => [
@@ -276,6 +376,7 @@ export default function App() {
         d.category || d.organizer || d.targetOrg || '',
         d.author,
         `"${(d.content || '').replace(/"/g, '""')}"`,
+        `"${(d.tags || []).join(', ')}"`,
         d.date || '',
         `"${(d.location || '').replace(/"/g, '""')}"`,
         d.link || ''
@@ -317,23 +418,47 @@ export default function App() {
   };
   const currentTheme = getTheme();
 
-  // 簡易的なSVGマップコンポーネント（表示用）
-  const renderSimpleMap = () => {
+  // ヒートマップ計算用
+  const maxPostsPerPref = Math.max(...Object.keys(prefPositions).map(code => 
+    data.filter(d => d.prefectureCode === code && d.type === activeTab).length
+  ), 1);
+
+  // 日本地図コンポーネント
+  const renderJapanMap = () => {
     return (
-      <div className="relative w-full h-full min-h-[400px] flex items-center justify-center bg-white rounded-3xl border-4 border-white mofumofu-shadow p-4">
-        <div className="flex flex-wrap gap-2 justify-center max-w-2xl">
-          {prefectures.map(pref => (
-            <button
-              key={pref.code}
-              onClick={() => setSelectedPref(pref)}
-              className={`
-                px-3 py-2 rounded-full font-bold text-sm transition-all mofumofu-shadow
-                ${selectedPref?.code === pref.code ? 'bg-pink-500 text-white scale-110' : 'bg-pink-50 text-pink-600 hover:bg-pink-100 hover:scale-105'}
-              `}
-            >
-              {pref.name}
-            </button>
-          ))}
+      <div className="relative w-full h-full min-h-[400px] flex items-center justify-center bg-white rounded-3xl border-4 border-white mofumofu-shadow p-4 overflow-auto custom-scrollbar">
+        <div 
+          className="grid gap-1 lg:gap-2 p-4" 
+          style={{ gridTemplateColumns: 'repeat(14, minmax(20px, 40px))', gridTemplateRows: 'repeat(14, minmax(20px, 40px))' }}
+        >
+          {Object.keys(prefPositions).map(code => {
+            const pos = prefPositions[code];
+            const prefDataCount = data.filter(d => d.prefectureCode === code && d.type === activeTab).length;
+            
+            // 投稿数に応じて色の濃さを計算 (ヒートマップ)
+            const intensity = prefDataCount > 0 ? 0.3 + (prefDataCount / maxPostsPerPref) * 0.7 : 0.05;
+            const bgColor = activeTab === 'actions' ? `rgba(236, 72, 153, ${intensity})` : 
+                            activeTab === 'groups' ? `rgba(16, 185, 129, ${intensity})` : 
+                            `rgba(245, 158, 11, ${intensity})`;
+            const textColor = prefDataCount > 0 && intensity > 0.6 ? 'text-white' : 'text-slate-600';
+
+            return (
+              <button
+                key={code}
+                onClick={() => setSelectedPref(prefectures.find(p => p.code === code))}
+                style={{ gridColumn: pos.col, gridRow: pos.row, backgroundColor: bgColor }}
+                className={`
+                  rounded-md lg:rounded-lg font-bold text-[10px] lg:text-xs flex items-center justify-center
+                  border transition-all hover:scale-110 mofumofu-shadow hover:z-10
+                  ${selectedPref?.code === code ? 'ring-4 ring-offset-2 ring-pink-400 z-10 scale-110 border-white text-white font-black' : 'border-slate-200/50 hover:border-white'}
+                  ${textColor}
+                `}
+                title={`${pos.name}: ${prefDataCount}件`}
+              >
+                {pos.name.substring(0, 1)}
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -358,7 +483,10 @@ export default function App() {
         </div>
         
         <div className="flex-1 relative">
-          {renderSimpleMap()}
+          {renderJapanMap()}
+          <div className="absolute bottom-6 right-6 bg-white/90 backdrop-blur px-3 py-2 rounded-xl text-[10px] font-bold text-slate-500 shadow-sm border border-slate-100 pointer-events-none">
+            投稿が多いほど色が濃くなります
+          </div>
         </div>
 
         {/* AI要約ボタン（全国表示時など） */}
@@ -402,6 +530,10 @@ export default function App() {
                       </button>
                     )
                   )}
+                  <div className="bg-slate-100 p-1 rounded-full flex gap-1">
+                    <button onClick={() => setViewFormat('card')} className={`p-1.5 rounded-full transition-all ${viewFormat === 'card' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><LayoutGrid className="w-4 h-4" /></button>
+                    <button onClick={() => setViewFormat('table')} className={`p-1.5 rounded-full transition-all ${viewFormat === 'table' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><LayoutList className="w-4 h-4" /></button>
+                  </div>
                   <button onClick={handleDownloadCSV} className="p-2 bg-slate-50 text-slate-500 rounded-full hover:bg-slate-100 transition-colors">
                     <Download className="w-4 h-4" />
                   </button>
@@ -459,18 +591,37 @@ export default function App() {
                     </button>
                     {isFormOpen && (
                       <div className="p-4 pt-0">
-                        <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+                        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
                           {errorMsg && <div className="text-xs text-red-500 font-bold">{errorMsg}</div>}
-                          {activeTab === 'tactics' ? (
-                            <div className="flex gap-2"><input type="text" placeholder="対象機関 (例: 〇〇市議会)" value={targetOrg} onChange={e=>setTargetOrg(e.target.value)} className="flex-1 p-2 border rounded-xl text-sm" required/></div>
-                          ) : activeTab === 'groups' ? (
-                            <div className="flex gap-2"><input type="text" placeholder="団体名" value={organizer} onChange={e=>setOrganizer(e.target.value)} className="flex-1 p-2 border rounded-xl text-sm" required/></div>
-                          ) : (
-                            <select value={selectedCategory} onChange={e=>setSelectedCategory(e.target.value)} className="p-2 border rounded-xl text-sm w-full"><option value="">カテゴリを選択</option>{actionCategories.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select>
-                          )}
-                          <textarea placeholder="内容を入力..." value={content} onChange={e=>setContent(e.target.value)} className="w-full h-20 p-3 border rounded-xl text-sm resize-none" required />
-                          <div className="flex justify-end">
-                            <button type="submit" disabled={isSubmitting} className={`px-4 py-2 rounded-full text-white font-bold text-sm ${currentTheme.btn} disabled:opacity-50`}>
+                          
+                          <div className="flex flex-col lg:flex-row gap-2">
+                            {activeTab === 'tactics' ? (
+                              <input type="text" placeholder="対象機関 (例: 〇〇市議会)" value={targetOrg} onChange={e=>setTargetOrg(e.target.value)} className="flex-1 p-2 border rounded-xl text-sm bg-slate-50 focus:bg-white" required/>
+                            ) : activeTab === 'groups' ? (
+                              <input type="text" placeholder="団体名" value={organizer} onChange={e=>setOrganizer(e.target.value)} className="flex-1 p-2 border rounded-xl text-sm bg-slate-50 focus:bg-white" required/>
+                            ) : (
+                              <select value={selectedCategory} onChange={e=>setSelectedCategory(e.target.value)} className="flex-1 p-2 border rounded-xl text-sm bg-slate-50 focus:bg-white"><option value="">カテゴリを選択</option>{actionCategories.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select>
+                            )}
+                            <input type="text" placeholder="タグをカンマ区切りで (例: #署名, #教育長)" value={tagsInput} onChange={e=>setTagsInput(e.target.value)} className="flex-1 p-2 border rounded-xl text-sm bg-slate-50 focus:bg-white" />
+                          </div>
+
+                          <textarea placeholder="内容を入力..." value={content} onChange={e=>setContent(e.target.value)} className="w-full h-24 p-3 border rounded-xl text-sm resize-none bg-slate-50 focus:bg-white" required />
+                          
+                          <div className="flex flex-col lg:flex-row gap-2 justify-between items-start lg:items-center">
+                            <div className="flex items-center gap-2 w-full lg:w-auto">
+                              <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleImageUpload} />
+                              <button type="button" onClick={() => fileInputRef.current.click()} className="flex items-center gap-1 px-3 py-2 text-xs font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors border border-slate-200">
+                                <Upload className="w-4 h-4" /> {attachedImage ? '画像を変更' : '画像を添付'}
+                              </button>
+                              {attachedImage && (
+                                <div className="relative w-10 h-10 rounded overflow-hidden border">
+                                  <img src={attachedImage} alt="添付プレビュー" className="w-full h-full object-cover" />
+                                  <button type="button" onClick={() => setAttachedImage(null)} className="absolute top-0 right-0 bg-black/50 text-white p-0.5"><X className="w-3 h-3" /></button>
+                                </div>
+                              )}
+                            </div>
+                            
+                            <button type="submit" disabled={isSubmitting} className={`w-full lg:w-auto px-6 py-2.5 rounded-full text-white font-bold text-sm ${currentTheme.btn} disabled:opacity-50 hover:-translate-y-0.5 transition-transform shadow-md`}>
                               {isSubmitting ? '送信中...' : '送信する'}
                             </button>
                           </div>
@@ -490,33 +641,106 @@ export default function App() {
                   <MessageSquare className={`w-16 h-16 ${currentTheme.accent} mb-4 opacity-50`} />
                   <h3 className="text-lg font-bold mb-2">この情報は関係者限定です🔒</h3>
                   <form onSubmit={handleUnlock} className="flex flex-col gap-2 w-full max-w-xs mt-4">
-                    <input type="password" placeholder="秘密の言葉 (breakthrough)" value={secretWord} onChange={e=>setSecretWord(e.target.value)} className="p-2 border rounded-full text-center" />
+                    <input type="password" placeholder="秘密の言葉 (minnnaegaode2026)" value={secretWord} onChange={e=>setSecretWord(e.target.value)} className="p-2 border rounded-full text-center" />
                     <button type="submit" className={`p-2 rounded-full text-white font-bold ${currentTheme.btn}`}>ロック解除</button>
                   </form>
                 </div>
               ) : filteredData.length > 0 ? (
-                <div className="flex flex-col gap-3">
-                  {filteredData.map(post => (
-                    <div key={post.id} onClick={() => setSelectedPost(post)} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start mb-2">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'tactics' ? 'bg-amber-100 text-amber-700' : activeTab === 'groups' ? 'bg-emerald-100 text-emerald-700' : actionCategories.find(c=>c.id===post.category)?.color}`}>
-                          {post.category || post.organizer || post.targetOrg}
-                        </span>
-                        <span className="text-[10px] text-slate-400">{formatDate(post.createdAt)}</span>
-                      </div>
-                      <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed mb-3">{post.content}</p>
-                      <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-50">
-                        <span className="text-xs font-bold text-slate-500">by {post.author}</span>
-                        <div className="flex items-center gap-3">
-                          <button onClick={(e) => handleToggleLike(e, post)} className={`flex items-center gap-1 text-xs font-bold transition-colors ${post.likes?.includes(user?.uid) ? 'text-pink-500' : 'text-slate-400 hover:text-pink-400'}`}>
-                            <Heart className={`w-4 h-4 ${post.likes?.includes(user?.uid) ? 'fill-current' : ''}`} /> {post.likes?.length || 0}
-                          </button>
-                          <span className="flex items-center gap-1 text-xs font-bold text-slate-400"><MessageCircle className="w-4 h-4" /> {post.comments?.length || 0}</span>
+                viewFormat === 'card' ? (
+                  // --- カード形式表示 ---
+                  <div className="flex flex-col gap-3">
+                    {filteredData.map(post => (
+                      <div key={post.id} onClick={() => setSelectedPost(post)} className="bg-white p-4 lg:p-5 rounded-2xl shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition-shadow relative overflow-hidden group">
+                        <div className="flex justify-between items-start mb-3">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] lg:text-xs font-bold ${activeTab === 'tactics' ? 'bg-amber-100 text-amber-700' : activeTab === 'groups' ? 'bg-emerald-100 text-emerald-700' : actionCategories.find(c=>c.id===post.category)?.color}`}>
+                            {post.category || post.organizer || post.targetOrg}
+                          </span>
+                          <span className="text-[10px] lg:text-xs text-slate-400 font-medium">{formatDate(post.createdAt)}</span>
+                        </div>
+                        
+                        <div className="flex gap-4">
+                          <div className="flex-1">
+                            <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed mb-3 line-clamp-3">{post.content}</p>
+                            
+                            {/* タグの表示 */}
+                            {post.tags && post.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mb-3">
+                                {post.tags.map((tag, idx) => (
+                                  <span key={idx} className="flex items-center gap-0.5 text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md font-medium"><Tag className="w-3 h-3" />{tag}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* 添付画像のサムネイル表示 */}
+                          {post.image && (
+                            <div className="w-20 h-20 lg:w-24 lg:h-24 shrink-0 rounded-xl overflow-hidden border border-slate-100 shadow-sm">
+                              <img src={post.image} alt="添付" className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between mt-2 pt-3 border-t border-slate-50">
+                          <span className="text-xs font-bold text-slate-500 flex items-center gap-1"><Users className="w-3 h-3"/> {post.author}</span>
+                          <div className="flex items-center gap-4">
+                            <button onClick={(e) => handleToggleLike(e, post)} className={`flex items-center gap-1 text-xs font-bold transition-colors ${post.likes?.includes(user?.uid) ? 'text-pink-500' : 'text-slate-400 hover:text-pink-400'}`}>
+                              <Heart className={`w-4 h-4 ${post.likes?.includes(user?.uid) ? 'fill-current' : ''}`} /> {post.likes?.length || 0}
+                            </button>
+                            <span className="flex items-center gap-1 text-xs font-bold text-slate-400"><MessageCircle className="w-4 h-4" /> {post.comments?.length || 0}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  // --- 表形式（テーブル）表示 ---
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-left border-collapse min-w-[600px]">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 text-xs uppercase border-b border-slate-200">
+                          <th className="p-3 font-bold whitespace-nowrap">日時</th>
+                          <th className="p-3 font-bold whitespace-nowrap">カテゴリ/対象</th>
+                          <th className="p-3 font-bold w-1/2">内容</th>
+                          <th className="p-3 font-bold whitespace-nowrap">投稿者</th>
+                          <th className="p-3 font-bold text-center whitespace-nowrap">添付</th>
+                          <th className="p-3 font-bold text-center whitespace-nowrap">アクション</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredData.map(post => (
+                          <tr key={post.id} className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => setSelectedPost(post)}>
+                            <td className="p-3 text-[10px] lg:text-xs text-slate-500 whitespace-nowrap">{formatDate(post.createdAt)}</td>
+                            <td className="p-3 text-xs font-bold text-slate-700 whitespace-nowrap">
+                              <span className={`px-2 py-0.5 rounded-full ${activeTab === 'tactics' ? 'bg-amber-100 text-amber-700' : activeTab === 'groups' ? 'bg-emerald-100 text-emerald-700' : actionCategories.find(c=>c.id===post.category)?.color}`}>
+                                {post.category || post.organizer || post.targetOrg}
+                              </span>
+                            </td>
+                            <td className="p-3 text-xs text-slate-600 font-medium">
+                              <div className="line-clamp-2 leading-relaxed">{post.content}</div>
+                              {post.tags && post.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {post.tags.map((tag, idx) => (
+                                    <span key={idx} className="text-[9px] text-slate-400 bg-slate-100 px-1 rounded">#{tag}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-3 text-xs text-slate-600 whitespace-nowrap">{post.author}</td>
+                            <td className="p-3 text-center">
+                              {post.image ? <ImageIcon className="w-4 h-4 text-blue-400 inline-block" /> : <span className="text-slate-300">-</span>}
+                            </td>
+                            <td className="p-3">
+                              <div className="flex items-center justify-center gap-3">
+                                <span className={`flex items-center gap-0.5 text-xs font-bold ${post.likes?.includes(user?.uid) ? 'text-pink-500' : 'text-slate-400'}`}><Heart className={`w-3 h-3 ${post.likes?.includes(user?.uid) ? 'fill-current' : ''}`} />{post.likes?.length || 0}</span>
+                                <span className="flex items-center gap-0.5 text-xs font-bold text-slate-400"><MessageCircle className="w-3 h-3" />{post.comments?.length || 0}</span>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
                   <Cloud className="w-16 h-16 mb-4 opacity-20" />
@@ -528,39 +752,68 @@ export default function App() {
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 p-6 text-center lg:rounded-l-[2rem]">
-            <Navigation className="w-16 h-16 lg:w-20 lg:h-20 text-slate-300 mb-6 animate-bounce" />
-            <h2 className="text-xl lg:text-3xl font-black text-slate-400 mb-4 tracking-tight">マップから地域を選んでね</h2>
+            <MapIcon className="w-16 h-16 lg:w-20 lg:h-20 text-slate-300 mb-6 animate-pulse" />
+            <h2 className="text-xl lg:text-3xl font-black text-slate-400 mb-4 tracking-tight">マップから都道府県を選んでね</h2>
+            <p className="text-sm text-slate-400 font-bold max-w-sm">左側の日本地図から、アクションを確認したい地域をタップしてください</p>
           </div>
         )}
       </div>
 
-      {/* モーダル類 */}
+      {/* 詳細モーダル (画像拡大にも対応) */}
       {selectedPost && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center p-0 lg:p-4">
-          <div className="bg-white w-full max-w-2xl max-h-[90vh] lg:rounded-3xl rounded-t-3xl shadow-2xl flex flex-col overflow-hidden animate-fade-in-up">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end lg:items-center justify-center p-0 lg:p-4 animate-fade-in-up">
+          <div className="bg-white w-full max-w-2xl max-h-[90vh] lg:rounded-3xl rounded-t-3xl shadow-2xl flex flex-col overflow-hidden relative">
             <div className={`p-4 border-b flex justify-between items-center ${activeTab==='groups' ? 'bg-emerald-50' : activeTab==='tactics' ? 'bg-amber-50' : 'bg-pink-50'}`}>
-              <h3 className="font-bold text-lg text-slate-700">詳細</h3>
-              <button onClick={() => setSelectedPost(null)} className="p-2 bg-white rounded-full"><X className="w-5 h-5"/></button>
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded-full text-xs font-bold bg-white shadow-sm ${activeTab === 'tactics' ? 'text-amber-700' : activeTab === 'groups' ? 'text-emerald-700' : actionCategories.find(c=>c.id===selectedPost.category)?.color?.split(' ')[1]}`}>
+                  {selectedPost.category || selectedPost.organizer || selectedPost.targetOrg}
+                </span>
+                <span className="text-xs text-slate-500 font-bold">{formatDate(selectedPost.createdAt)}</span>
+              </div>
+              <button onClick={() => setSelectedPost(null)} className="p-2 bg-white rounded-full hover:bg-slate-100 transition-colors"><X className="w-5 h-5"/></button>
             </div>
-            <div className="p-6 overflow-y-auto">
-              <p className="text-slate-800 whitespace-pre-wrap">{selectedPost.content}</p>
-              {/* コメント領域 */}
-              <div className="mt-8 border-t pt-4">
-                <h4 className="font-bold text-sm text-slate-500 mb-4 flex items-center gap-2"><MessageCircle className="w-4 h-4"/> コメント</h4>
-                <div className="flex flex-col gap-3 mb-4">
-                  {(selectedPost.comments || []).map(comment => (
-                    <div key={comment.id} className="bg-slate-50 p-3 rounded-xl">
-                      <div className="flex justify-between text-[10px] text-slate-400 mb-1">
-                        <span className="font-bold">{comment.author}</span>
-                        <span>{new Date(comment.createdAt).toLocaleDateString()}</span>
-                      </div>
-                      <p className="text-sm">{comment.text}</p>
-                    </div>
+            
+            <div className="p-6 overflow-y-auto custom-scrollbar flex flex-col">
+              <div className="flex items-center gap-2 mb-4 text-sm font-bold text-slate-500">
+                <Users className="w-4 h-4" /> {selectedPost.author} さんの投稿
+              </div>
+              
+              <p className="text-slate-800 whitespace-pre-wrap leading-relaxed mb-6 font-medium text-lg">{selectedPost.content}</p>
+              
+              {selectedPost.tags && selectedPost.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {selectedPost.tags.map((tag, idx) => (
+                    <span key={idx} className="flex items-center gap-1 text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded-lg font-bold"><Tag className="w-3 h-3" />{tag}</span>
                   ))}
                 </div>
-                <form onSubmit={handleAddComment} className="flex gap-2">
-                  <input type="text" value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="コメントを追加..." className="flex-1 p-2 text-sm border rounded-full bg-slate-50" />
-                  <button type="submit" disabled={!commentText.trim()} className="px-4 py-2 bg-slate-800 text-white text-sm font-bold rounded-full disabled:opacity-50">送信</button>
+              )}
+
+              {selectedPost.image && (
+                <div className="mb-8 rounded-2xl overflow-hidden border-4 border-slate-50 mofumofu-shadow">
+                  <img src={selectedPost.image} alt="添付拡大" className="w-full h-auto" />
+                </div>
+              )}
+
+              {/* コメント領域 */}
+              <div className="mt-auto border-t-2 border-slate-100 pt-6">
+                <h4 className="font-bold text-sm text-slate-500 mb-4 flex items-center gap-2"><MessageCircle className="w-4 h-4"/> みんなのコメント</h4>
+                <div className="flex flex-col gap-3 mb-4">
+                  {(selectedPost.comments || []).map(comment => (
+                    <div key={comment.id} className="bg-slate-50 p-4 rounded-2xl">
+                      <div className="flex justify-between text-xs text-slate-400 mb-2">
+                        <span className="font-bold text-slate-600">{comment.author}</span>
+                        <span>{new Date(comment.createdAt).toLocaleDateString()}</span>
+                      </div>
+                      <p className="text-sm font-medium text-slate-700">{comment.text}</p>
+                    </div>
+                  ))}
+                  {(!selectedPost.comments || selectedPost.comments.length === 0) && (
+                    <p className="text-xs text-slate-400 text-center py-4 font-bold">まだコメントはありません。一番乗りで応援しよう！</p>
+                  )}
+                </div>
+                <form onSubmit={handleAddComment} className="flex gap-2 relative mt-4">
+                  <input type="text" value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="あたたかいコメントを追加..." className="flex-1 p-3 pl-4 text-sm border-2 rounded-full bg-slate-50 focus:bg-white focus:border-pink-300 transition-colors" />
+                  <button type="submit" disabled={!commentText.trim()} className="absolute right-1.5 top-1.5 bottom-1.5 px-4 bg-slate-800 text-white text-sm font-bold rounded-full disabled:opacity-50 hover:bg-slate-700 transition-colors">送信</button>
                 </form>
               </div>
             </div>
@@ -569,7 +822,7 @@ export default function App() {
       )}
 
       {aiSummary && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl relative">
             <button onClick={() => setAiSummary('')} className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors"><X className="w-5 h-5" /></button>
             <div className="flex items-center gap-3 mb-4"><div className="p-3 bg-gradient-to-br from-pink-100 to-purple-100 rounded-2xl"><Bot className="w-8 h-8 text-pink-500" /></div><h3 className="text-xl font-black text-slate-800 tracking-tight">AI アクション要約</h3></div>
@@ -580,7 +833,7 @@ export default function App() {
 
       <style dangerouslySetInnerHTML={{__html: `
         .mofumofu-shadow { box-shadow: 0 8px 30px rgba(0,0,0,0.04), 0 4px 10px rgba(0,0,0,0.02); }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
